@@ -1,0 +1,64 @@
+# Persistent Volume Claim to store PostgresSQL data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  labels:
+    app: postgres-db
+spec:
+  accessModes:
+    - ReadWriteOnce                # Access mode for a single instance read-write
+  resources:
+    requests:
+      storage: 1Gi                 # Request 1 GB of storage
+
+---
+# Service to expose PostgresSQL within the cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-db                   # Internal name of the service for other pods
+spec:
+  ports:
+    - port: 5432                      # Port PostgresSQL listens on
+  selector:
+    app: postgres-db                  # Matches the labels for the PostgresSQL pod
+
+---
+# Deployment for PostgresSQL
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-db
+spec:
+  replicas: 1                      # Only one instance of the database
+  selector:
+    matchLabels:
+      app: postgres-db
+  template:
+    metadata:
+      labels:
+        app: postgres-db
+    spec:
+      containers:
+        - name: postgres
+          image: budget-app-db
+          env: # Environment variables for configuring the database
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-storage  # Mount storage volume to persist data
+              subPath: postgres
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc  # Link to the persistent volume claim above
